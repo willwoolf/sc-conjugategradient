@@ -1,0 +1,755 @@
+\documentclass{article}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{verbatim}
+\usepackage{listings}
+\usepackage{float}
+\usepackage{dsfont}
+\usepackage[width=6in, height=8in]{geometry}
+\usepackage{xcolor}
+
+\usepackage[
+backend=biber,
+natbib=true,
+url=false, 
+doi=true,
+eprint=false
+]{biblatex}
+\addbibresource{sources.bib}
+
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{mystyle}{
+	backgroundcolor=\color{backcolour},   
+	commentstyle=\color{codegreen},
+	keywordstyle=\color{magenta},
+	numberstyle=\tiny\color{codegray},
+	stringstyle=\color{codepurple},
+	basicstyle=\ttfamily\footnotesize,
+	breakatwhitespace=false,         
+	breaklines=true,                 
+	captionpos=b,                    
+	keepspaces=true,                 
+	numbers=left,                    
+	numbersep=5pt,                  
+	showspaces=false,                
+	showstringspaces=false,
+	showtabs=false,                  
+	tabsize=2
+}
+
+\lstset{style=mystyle}
+
+\title{The Conjugate Gradient Method}
+\author{Will Woolfenden}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+%% introduction
+\section{Introduction}
+
+The Conjugate Gradient (CG) method is a method for efficiently solving a system of linear equations.
+It is efficient because time complexity is reduced from other methods, such as gradient descent or Newton's method.
+Linear systems with sparse matrices are common when we apply finite difference methods to solve boundary value problems. 
+In this report we look at solving these linear systems,
+providing finite difference approximations to Poisson's equation in $1$D $u''(s) = g(s)$
+and in $2$D $\nabla^2 u(s,t) = 1$.
+
+\section{Methods, Results and Verification}
+%% methods
+\subsection{Conjugate Gradient}
+% applying the CG method in C++
+% verifying that we are actually performing the CG method
+In CG, we start with a guess $\mathbf{x}_0$ to solve $\mathbf{Ax}=\mathbf{b}$.
+At every step, we compute $\mathbf{r}_i=\mathbf{Ax}_i-\mathbf{b}$ with stopping criterion $||\mathbf{r}||<\varepsilon$.
+Our search vectors $\mathbf{p}_i$ are chosen such that they obey $\mathbf{p}_j^\mathrm{T}\mathbf{Ap}_i$ for $i\ne j$, with $\mathbf{p}_0 = \mathbf{r}_0$.
+We perform this with a Gram-Schmidt orthogonalisation\footnote{
+	this requires $\mathbf{A}$ to be $n \times n$ with all vectors being $n$-vectors.  
+} with the inner product $\langle \mathbf{u},\mathbf{v}\rangle_\mathbf{A} = \mathbf{u}^\mathrm{T}\mathbf{Av}$.
+Each iteration performs
+\begin{align*}
+	\mathbf{x}_{i+1} &= \mathbf{x}_i + \frac{\mathbf{r}_i^\mathrm{T}\mathbf{r}_i}{\mathbf{p}^\mathrm{T}_i\mathbf{Ap}_i}\mathbf{p}_i\\
+	\mathbf{r}_{i+1} &= \mathbf{r}_i - \frac{\mathbf{r}_i^\mathrm{T}\mathbf{r}_i}{\mathbf{p}^\mathrm{T}_i\mathbf{Ap}_i}\mathbf{Ap}_i\\
+	\mathbf{p}_{i+1} &= \mathbf{r}_{i+1}+\frac{\mathbf{r}_{i+1}^\mathrm{T}\mathbf{r}_{i+1}}{\mathbf{r}_{i}^\mathrm{T}\mathbf{r}_{i}}\mathbf{p}_i.
+\end{align*}
+The residual vector $\mathbf{r}_i$ describes the distance of $\mathbf{x}_i$ to the solution $\mathbf{x}*$ which satisfies $\mathbf{Ax}* = \mathbf{b}$.
+The vectors $\mathbf{p}_i$ are the search directions of the iteration.
+For every iteration, we compute the distance we need to travel along each search direction,
+by intuitively realising that at a point $\mathbf{x}_i$, 
+the vector from $\mathbf{x}_i$ to the optimiser $\mathbf{x}*$ is $\mathbf{A}$-orthogonal to all the search directions we have already traversed. 
+%give an example and show that the code replicates it
+\subsection{Finite Difference Methods: Poisson's Equation}
+We want to form a finite difference approximation to Poisson's equation in $1$D $u''(s)=g(s)$,
+subject to boundary conditions $u(0) = u(1) = 0$.
+We discretise $s$ into $n+2$ points\footnote{
+	$n$ points excluding $0$ and $1$.
+} in the interval $[0, 1]$ where $s_k = kh, ~k=0, 1, 2, \mathellipsis n+1$ and $h = 1/(n+1)$.
+The finite difference approximation to the second derivative is
+\begin{equation}
+	u''(s) \approx \dfrac{u(s-h) - 2u(s) + u(s+h)}{h^2} 
+\end{equation}
+which can be seen by the Taylor series expansions of the $u(s)$ terms.
+Write $u_k = u(s_k),~g_k = g(s_k)$. Boundary conditions are $u_0 = u_n = 0$. We obtain the linear system
+\begin{equation*}
+	\begin{bmatrix}
+		-2 & 1 & ~ & ~ & ~ & ~ \\
+		1 & -2 & 1 & ~ & ~ & ~ \\
+		~ & 1 & \ddots & \ddots & ~ & ~ \\
+		~ & ~ & \ddots & \ddots & 1 & ~ \\
+		~ & ~ & ~ & 1 & -2 & 1 \\
+		~ & ~ & ~ & ~ & 1 & -2 
+	\end{bmatrix} \begin{pmatrix}
+	u_1 \\
+	u_2 \\
+	\vdots \\
+	\vdots \\
+	u_{n-1} \\
+	u_{n}
+	\end{pmatrix} = -{h^2}\begin{pmatrix}
+	g_1 \\
+	g_2 \\
+	\vdots \\
+	\vdots \\
+	g_{n-1} \\
+	g_n
+\end{pmatrix}.
+\end{equation*}
+This is a linear system of the form $\mathbf{Ax} = \mathbf{b}$ which we can solve using the CG method.
+Consider the case where $g$ is the constant function $g(s) = -1$, and where $\mathbf{A}$ is $5 \times 5$.
+The system in full, changing sign, is
+\begin{equation*}
+	\begin{bmatrix}
+		2 & -1 & 0 & 0 & 0 \\
+		-1 & 2 & -1 & 0 & 0 \\
+		0 & -1 & 2 & -1 & 0 \\
+		0 & 0 & -1 & 2 & -1 \\
+		0 & 0 & 0 & -1 & 2
+	\end{bmatrix} \begin{pmatrix}
+	u_1 \\
+	u_2 \\
+	u_3 \\
+	u_4 \\
+	u_5
+\end{pmatrix} = \frac{1}{(n+1)^2}\begin{pmatrix}
+	1 \\
+	1 \\
+	1 \\
+	1 \\
+	1
+\end{pmatrix}.
+\end{equation*}
+Our code produces \texttt{tridiagonal\_convergence\_0611.txt}:
+\begin{verbatim}
+      Time t |      L2 norm |    LInf norm
+0 |      2.22448 |      1.97222
+5.4392e-05 |   0.588795 |   0.397175
+6.394e-05 |   0.233913 |   0.188237
+7.0762e-05 |    0.10518 |  0.0963511
+7.7545e-05 | 0.00941914 | 0.00515077
+8.3386e-05 | 2.94053e-16 | 1.73472e-16
+\end{verbatim}
+which claims to solve the system in exactly $5$ iterations.
+This is appropriate for CG, which is designed to converge in no more iterations than the size of the system \cite{shewchuk1994introduction}.
+Our program prints the solution $x = \mathtt{( 0.0694444,   0.111111,      0.125,   0.111111, 0.0694444)}$.
+Using the solver in \texttt{Octave} verifies this computation, shown in \ref{apd:octave_5}, hence it is the true solution of the linear system.
+
+\begin{figure}
+	\centering
+	\includegraphics[width=0.77\linewidth]{figures/poissond.eps}
+	\caption{
+		Comparison of the closed form solution to the ODE, using \texttt{fplot()},
+		and the $n=5$ finite difference approximation from solving the system with CG.
+}
+	\label{fig:poisson1d}
+\end{figure}
+The ODE we are solving is $u''(s) = -1$.
+By direct integration, the general solution is $u(s) = Cs^2 + Ds$ for constants $C, D$.
+Plugging in boundary conditions, we obtain the particular solution $u(s) = -s(s-1)/2$ in closed form.
+See Figure \ref{fig:poisson1d} for a comparison.
+
+\subsection{Perturbed Tridiagonal}
+
+\begin{figure}
+	\centering
+	\includegraphics[width=0.65\linewidth]{figures/tridiagonalconvergencetimes.eps}
+	\caption{
+		Convergence graphs for different size tridiagonal systems.
+		The solutions converge more rapidly for larger diagonal entries.
+		The matrices $\mathbf{A}$ are the same as earlier except for $2+\alpha$ on the diagonal,
+		and the vectors $\mathbf{b}$ are $b_k = 2.5$ for all $k$.
+	}
+	\label{fig:tridiag}
+\end{figure}
+We perturb the system such that the main diagonal contains $2+\alpha$ instead of $2$,
+for some positive real constant $\alpha$.
+In this case, we impose $\mathbf{b}$ to be the vector with all entries $b_i = 2.5$,
+equivalently all $g_i = -5(n+1)^2/2$.
+Figure \ref{fig:tridiag} illustrates the convergence of these tridiagonal systems.
+We notice that, as the entries on the main diagonal grow, the effectiveness of the iterations increases.
+The convergence of the CG method is $\mathcal{O}(m\sqrt{\kappa})$,
+where $m$ is the number of non-zero entries in the matrix and $\kappa$ is the condition number for any choice of norm \cite{shewchuk1994introduction2}.
+As the entries on the diagonal grow, $\mathbf{A}$ becomes closer to a diagonal matrix, and its condition number decreases,
+hence CG is more effective.
+Important to note is that our implementation does not entirely match this claim on the order of the CG method.
+Our \texttt{MMatrix} and \texttt{MVector} classes are not optimised for speed.
+For example, we are not optimised for multiplying with a sparse matrix, which would allow us to ignore all the entries containing $0$.
+
+\subsection{Poisson's Equation in 2D}
+
+\begin{figure}
+	\centering
+	\includegraphics[width=\linewidth]{figures/poisson2dconvergence.eps}
+	\caption{
+		Convergence graphs for the CG method applied to the linear system with the Laplacian matrix.
+		Each path attains a unique minimum and maximum which bound a region of inflection.
+	}
+	\label{fig:2dconv}
+\end{figure}
+\begin{figure}
+	\centering
+	\includegraphics[width=0.65\linewidth]{figures/iterationsbig.eps}
+	\caption{
+		Number of iterations required for convergence for different matrix sizes.
+		The curve appears logarithmic }
+	\label{fig:2diter}
+\end{figure}
+\begin{figure}
+	\centering
+	\includegraphics[width=0.65\linewidth]{figures/laplacesizevstime.eps}
+	\caption{
+		Running time, measured in seconds, of the C++ implementation of the CG method,
+		against the size of the linear system we are solving.
+		The polynomial approximation to our results was performed in MATLAB,
+		and the fitting was unsuccessful for polynomials of degree $<3$.
+		The polynomial is technically $\mathcal{O}(n^6)$ agreeing with our definition of $n$ such that the system is $n^2 \times n^2$,
+		but it is a degree $3$ polynomial on the domain.
+	}
+	\label{fig:2dtime}
+\end{figure}
+\begin{figure}
+	\centering
+	\includegraphics[width=0.68\linewidth]{figures/solutions.eps}
+	\caption{
+		Solutions to Poisson's equation in $2$D computed as a solution to a system of linear equations via. the CG method.
+		As $n$ increases, our results converge and we see negligible change between $n=20$ and $n=50$.
+		Blue contours are lower in magnitude than the yellow curves near the centres of the images. 
+	}
+	\label{fig:2dsolns}
+\end{figure}
+We are now interested in the problem in two variables $\nabla^2 u(s,t) = 1$, with boundary conditions $u(s,0) = u(s,1) = u(0,t) = u(1,t) = 0$.
+By the finite difference method, the matrix is of the form
+\begin{equation}
+	(\mathbf{A})_{ij} = \begin{cases}
+		4 & \mathrm{if}~{i=j} \\
+		-1 & \mathrm{if}~ |i-j|=n \\
+		-1 & \mathrm{if}~ |i-j|=1 ~\mathrm{and} \\ 
+		 & (i+j) \mod (2n) \neq 2n-1 \\
+		0 & \mathrm{otherwise}
+	\end{cases} 
+	\label{eqn:lapmat}
+\end{equation}
+which we will refer to as the \textit{Laplacian matrix}.
+Like before, $\mathbf{b} = b_i = 1/(n+1)^2$.
+See Figure \ref{fig:2dconv}, which shows a selection of iterations for the $2$D approximation to Poisson's equation.
+In Figures \ref{fig:2diter} and \ref{fig:2dtime} we show the impacts of scaling the matrix size.
+Particularly in Figure \ref{fig:2dtime}, we have shown that our implementation is $\mathcal{O}(d^3)$,
+where $d=n^2$ is the size of the system.
+Methods for solving a system of $n$ linear equations are often $\mathcal{O}(n^3)$ \cite{Meyer_2000}.
+Solutions to Poisson's equation in $2$D are shown in Figure \ref{fig:2dsolns},
+where we have shown a convergence of results as $n$ increases.
+The boundary condition is attained on the horizontal boundaries.
+
+\subsection{Properties of the Conjugate Gradient Method}
+
+CG is only stable in exact arithmetic for symmetric, positive definite matrices \cite{Greenbaum_1997}.
+As such, the modified inner product from earlier of a vector with itself $\langle \mathbf{p},\mathbf{p}\rangle_\mathbf{A} = \mathbf{p}^\mathrm{T}\mathbf{Ap}$ is always positive.
+Furthermore if $\mathbf{A}$ is not symmetric then
+\begin{align*}
+	\langle \mathbf{u}, \mathbf{v} \rangle_\mathbf{A} &= \langle \mathbf{u}, \mathbf{Av} \rangle \\
+	&= \langle \mathbf{A}^\mathrm{T}\mathbf{u}, \mathbf{v} \rangle \\
+	&\neq \langle \mathbf{A}\mathbf{u}, \mathbf{v} \rangle
+\end{align*}
+is not an inner product.
+
+All the stencil matrices we have looked at are symmetric (by inspection) and positive definite since they have entirely positive eigenvalues.
+This is a necessary criterion for CG to succeed.
+Floating point arithmetic may lead to rounding errors during computation, meaning that some methods will not succeed as they may in exact arithmetic.
+
+Given the $5\times 5$ matrix
+\begin{equation*}
+	\mathbf{A} = \begin{bmatrix}
+		2 & -1 & 0 & 0 & 0 \\
+		-1 & 2 & -1 & 0 & 0 \\
+		0 & -1 & 2 & -1 & 0 \\
+		0 & 0 & -1 & 2 & -1 \\
+		0 & 0 & 0 & -1 & 2
+	\end{bmatrix}
+\end{equation*}
+we can compute its inverse
+\begin{equation*}
+	\mathbf{A}^{-1} = \begin{bmatrix}
+		\frac{5}{6} & \frac{2}{3} & \frac{1}{2} & \frac{1}{3} & \frac{1}{6} \\
+		\frac{2}{3} & \frac{4}{3} & 1 & \frac{2}{3} & \frac{1}{3} \\
+		\frac{1}{2} & 1 & \frac{3}{2} & 1 & \frac{1}{2} \\
+		\frac{1}{3} & \frac{2}{3} & 1 & \frac{4}{3} & \frac{2}{3} \\
+		\frac{1}{6} & \frac{1}{3} & \frac{1}{2} & \frac{2}{3} & \frac{5}{6}
+	\end{bmatrix}
+\end{equation*}
+and find the condition number $||\mathbf{A}||_F ||\mathbf{A}^{-1}||_F \approx 20.7$.
+The identity matrix has the minimum condition number $1$.
+As we saw earlier, the condition number affects the time of the CG method.
+Particularly, Figure \ref{fig:tridiag} showed that for larger diagonal entries,
+the method converges faster. For larger diagonal entries,
+the condition number is smaller. Hence a large condition number can be a strong factor affecting the run time of CG.
+
+
+
+% time complexity of solving the system
+% verifying that our solutions are correct
+
+%% problems solved
+
+% generic PDE in 2 variables
+
+% Laplace's equation
+
+%% conclusion
+
+\section{Conclusion}
+
+We can use the conjugate gradient method to solve a linear system $\mathbf{Ax}=\mathbf{b}$ for a symmetric positive definite matrix.
+Uniquely, CG will always converge within the number of iterations that there are rows/columns in the matrix.
+It does this by computing search directions which are conjugate under $\mathbf{A}$ and traversing them,
+computing how far each direction must be travelled by.
+Conjugate Gradient may be favourable to methods such as gradient descent or other options when we can guarantee stability.
+The time complexity of the method is improved for a sparse and also a well-conditioned matrix.
+Our results show the effectiveness of the CG method for solving finite difference approximations to differential equations in one and two dimensions,
+where we have been able to show accuracy and convergence of our results.
+
+\printbibliography
+
+\appendix
+
+\section{Appendix - C++ Code Implementations}
+
+\subsection{Compiled Code}
+
+\subsubsection{\texttt{main.cpp}}
+\lstinputlisting[language=c++]{main.cpp}
+
+\subsubsection{\texttt{mmatrix.cpp}}
+\begin{lstlisting}[language=c++]
+#include <vector>
+#include <iostream>
+#include <iomanip>
+#include <ios>
+#include <algorithm>
+#include <cmath>
+
+#include "mmatrix.h"
+#include "mvector.h"
+
+using namespace std;
+
+MVector operator*(const MMatrix& A, const MVector& v)
+{
+	// check compatibility
+	if (A.Cols() != v.size())
+	{
+		cout << "wrong dims" << endl;
+		exception e;
+		throw e;
+	}
+	// initialise output vector
+	int vout_size = A.Rows();
+	MVector vout = MVector(vout_size);
+
+	for (int i = 0; i < A.Rows(); i++)
+	{
+		// sum across j
+		double sum = 0;
+		for (int j = 0; j < A.Cols(); j++)
+		{
+			sum += A(i, j)*v[j];
+		}
+		vout[i] = sum;        
+	}
+	return vout;
+}
+
+ostream& operator<<(ostream& os, const MMatrix& A)
+{
+	for (int i = 0; i < A.Rows(); i++)
+	{
+		os << "|  ";
+		for (int j = 0; j < A.Cols(); j++)
+		{
+			os << setw(3) << A(i, j) << "  ";
+		}
+		os << "|\n";
+	}
+	return os;
+}
+
+void makeTridiagonal(MMatrix& A, double d, double bd)
+{
+	/*
+	takes the arguments for the diagonal and band, and passes the matrix by reference.
+	A must already be the size we want, but its entries will be entirely overwritten.
+	*/
+	if (A.Rows() != A.Cols())
+	{
+		throw invalid_argument("error: matrix not square");
+	}
+	for (int i = 0; i < A.Rows(); i++)
+	{
+		for (int j = 0; j < A.Cols(); j++)
+		{
+			if (i == j)
+			{
+				A(i, j) = d;
+			}
+			else if (abs(i - j) == 1)
+			{
+				A(i, j) = bd;
+			}
+			else
+			{
+				A(i, j) = 0;
+			}
+		}
+	}  
+}
+
+void makeLaplacian(MMatrix& A, double d, double bd)
+{
+	/*
+	behaves similarly to makeTridiagonal in its arguments. for solutions to the Laplacian equation.
+	*/
+	if (A.Rows() != A.Cols())
+	{
+		throw invalid_argument("error: matrix not square");
+	}
+	double sz = sqrt(A.Rows());
+	if (floor(sz) != sz)
+	{
+		// A must be n^2 by n^2
+		throw invalid_argument("error: matrix is not of dimension n^2.n^2");
+	}
+	int n = sz;
+	for (int i = 0; i < A.Rows(); i++)
+	{
+		for (int j = 0; j < A.Cols(); j++)
+		{
+			if (i == j)
+			{
+				A(i, j) = d;
+			}
+			else if (abs(i - j) == n)
+			{
+				A(i, j) = bd;
+			}
+			else if ((abs(i - j) == 1) && ((i + j) % 2*n != 2*n - 1))
+			{
+				A(i, j) = bd;
+			}
+			else
+			{
+				A(i, j) = 0;
+			}
+		}
+	}
+}
+\end{lstlisting}
+
+\subsubsection{\texttt{mvector.cpp}}
+\begin{lstlisting}[language=c++]
+#include <vector>
+#include <iostream>
+#include <iomanip>
+#include <algorithm>
+#include <cmath>
+
+#include "mvector.h"
+
+using namespace std;
+
+// constructors in header
+
+MVector operator*(const double& lhs, const MVector& rhs)
+{
+	MVector temp = rhs;
+	for (int i = 0; i < temp.size(); i++)
+	{
+		temp[i] *= lhs;
+	}
+	return temp;
+}
+
+MVector operator*(const MVector& lhs, const double& rhs)
+{
+	return rhs*lhs;
+}
+
+MVector operator+(const MVector& lhs, const MVector& rhs)
+{
+	if (lhs.size() != rhs.size())
+	{
+		exception e;
+		throw e;
+	}
+	MVector temp(lhs.size());
+	for (int i = 0; i < temp.size(); i++)
+	{
+		temp[i] = lhs[i] + rhs[i];
+	}
+	return temp;
+}
+
+MVector operator-(const MVector& lhs, const MVector& rhs)
+{
+	return lhs+(-1*rhs);
+}
+
+// alternative overload such that given MVector v, -v is allowed
+MVector MVector::operator-()
+{
+	MVector vec(v.size());
+	for (int i = 0; i < vec.size(); i++)
+	{
+		vec[i] = -v[i];
+	}
+	return vec;
+}
+
+MVector operator/(const MVector& lhs, const double& rhs)
+{
+	return (1/rhs)*lhs;
+}
+
+ostream& operator<<(ostream& os, const MVector& v)
+{
+	int n = v.size();
+	os << "(";
+	for (int i = 0; i < n-1; i++)
+	{
+		os << setw(10) << v[i] << ", ";
+	}
+	os << v[n-1];
+	os << ")";
+	return os;
+}
+
+double MVector::LInfNorm() const
+{
+	double maxAbs = 0;
+	size_t s = size();
+	for (int i=0; i<s; i++)
+	{
+		maxAbs = max(abs(v[i]), maxAbs);
+	}
+	return maxAbs;
+}
+
+double MVector::L2Norm() const
+{
+	double sum = 0;
+	for (int i = 0; i < v.size(); i++)
+	{
+		sum += v[i]*v[i];
+	}
+	return sqrt(sum);
+}
+
+double dot(const MVector& lhs, const MVector& rhs)
+{
+	if (lhs.size() != rhs.size())
+	{
+		throw invalid_argument("error: dot product not defined for vectors of non-equal dimension");
+	}
+	double sum = 0;
+	for (int i = 0; i < lhs.size(); i++)
+	{
+		sum += lhs[i]*rhs[i];
+	}
+	return sum;
+}
+\end{lstlisting}
+
+\subsection{Included Code}
+
+\subsubsection{\texttt{mmatrix.h}}
+\begin{lstlisting}[language=c++]
+ifndef MMATRIX_H // the 'include guard'
+#define MMATRIX_H
+
+#include <vector>
+#include <iostream>
+#include "mvector.h"
+
+using namespace std;
+
+// Class that represents a mathematical matrix
+class MMatrix
+{
+public:
+	// constructors
+	MMatrix() : nRows(0), nCols(0) {}
+	MMatrix(int n, int m, double x = 0) : nRows(n), nCols(m), A(n * m, x) {}
+
+	// set all matrix entries equal to a double
+	MMatrix &operator=(double x)
+	{
+		for (unsigned i = 0; i < nRows * nCols; i++) A[i] = x;
+		return *this;
+	}
+
+	// access element, indexed by (row, column) [rvalue]
+	double operator()(int i, int j) const
+	{
+		return A[j + i * nCols];
+	}
+
+	// access element, indexed by (row, column) [lvalue]
+	double &operator()(int i, int j)
+	{
+		return A[j + i * nCols];
+	}
+
+	friend MVector operator*(const MMatrix& A, const MVector& v);
+	friend ostream& operator<<(ostream& os, const MMatrix& A);
+
+	// size of matrix
+	int Rows() const { return nRows; }
+	int Cols() const { return nCols; }
+
+private:
+	unsigned int nRows, nCols;
+	vector<double> A;
+};
+
+void makeTridiagonal(MMatrix& A, double d, double bd);
+void makeLaplacian(MMatrix& A, double d, double bd);
+
+#endif
+\end{lstlisting}
+
+\subsubsection{\texttt{mvector.h}}
+\begin{lstlisting}[language=c++]
+#ifndef MVECTOR_H // the 'include guard'
+#define MVECTOR_H // see C++ Primer Sec. 2.9.2
+
+#include <vector>
+
+using namespace std;
+
+// Class that represents a mathematical vector
+class MVector
+{
+public:
+	// constructors
+	MVector() {}
+	MVector(int n) : v(n) {}
+	MVector(int n, double x) : v(n, x) {}
+	MVector(initializer_list<double> l) : v(l) {}
+
+	// access element (lvalue) (see example sheet 5, q5.6)
+	double &operator[](int index) 
+	{ 
+		return v[index];
+	}
+
+	// access element (rvalue) (see example sheet 5, q5.7)
+	double operator[](int index) const {
+		return v[index]; 
+	}
+
+	// operator overloads
+	MVector operator-();
+
+	friend MVector operator*(const double& lhs, const MVector& rhs);
+	friend MVector operator*(const MVector& lhs, const double& rhs);
+	friend MVector operator+(const MVector& lhs, const MVector& rhs);
+	friend MVector operator-(const MVector& lhs, const MVector& rhs);
+	friend MVector operator/(const MVector& lhs, const double& rhs);
+
+	friend ostream& operator<<(ostream& os, const MVector& v);
+	
+	// get size
+	int size() const { return v.size(); } // number of elements
+
+	//vector norms
+	double LInfNorm() const;
+	double L2Norm() const;
+
+
+private:
+	vector<double> v;
+};
+
+// dot product
+double dot(const MVector& lhs, const MVector& rhs);
+\end{lstlisting}
+
+\section{Appendix - Extra Code}
+
+\subsection{Octave verification of linear solver}
+\label{apd:octave_5}
+\begin{verbatim}
+octave:11> A
+A =
+2  -1   0   0   0
+-1   2  -1   0   0
+0  -1   2  -1   0
+0   0  -1   2  -1
+0   0   0  -1   2
+
+octave:12> b
+b =
+0.027778
+0.027778
+0.027778
+0.027778
+0.027778
+
+octave:13> A\b
+ans =
+0.069444
+0.111111
+0.125000
+0.111111
+0.069444
+\end{verbatim}
+
+\section{Appendix - Notes on the problems addressed}
+
+%code is bad
+The code provided does not immediately provide all of the results stated.
+I have enclosed the code as is due to time constraints.
+The current implementation writes a file which documents computation time for any execution of \texttt{conjugateGradientSolve()}.
+It is stated in the body that our code produces a file which consists of given results.
+The norm values are consistent, but the times will change due to different hardware and system resources if executed.
+The code was modified when it was needed to write the solutions to Poisson's equation in 2D in matrix form.
+
+%confusion for laplacian problem - not satisfying boundary conditions,
+There is confusion with the problem for Poisson's equation in $2$D.
+The problem states that we are solving $\nabla^2 u = 1$ and the formulation for this is analogous to the 1D problem given,
+however for the 1D problem the model equation is $u'(s) = -1$.
+Our solutions for both are positive valued.
+If we are solving the 2D equation our solution should be negative,
+but the matrix and vector in the solution are verified to be correct as given by the problem statement.
+%and not negative
+Furthermore, the solution seems to only satisfy the boundary conditions on the horizontal boundary lines.
+\bigskip
+
+All code compiled successfully on Ubuntu 22.04 Linux with g++ using \texttt{-O2} optimisation, faster floating point arithmetic \texttt{-ffast-math} and native hardware priority \texttt{-march=native}.
+
+\end{document}
